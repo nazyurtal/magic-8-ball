@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Magic 8 Ball</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+  :root {
+    --paper: #f2f0ec;
+    --ink: #1c1c1c;
+    --muted: #8a8a82;
+    --line: #d9d6cf;
+    --braun: #555550;
+    --field-bg: #ffffff;
+    --field-border: #c7c4bc;
+  }
+  html[data-theme="dark"] {
+    --paper: #121212;
+    --ink: #ececec;
+    --muted: #8f8f8f;
+    --line: #2c2c2c;
+    --braun: #cfcfcf;
+    --field-bg: #1d1d1d;
+    --field-border: #3a3a3a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100svh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: max(16px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+    -webkit-font-smoothing: antialiased;
+    transition: background 0.25s, color 0.25s;
+  }
+
+  .wrap {
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* On screens tall enough, lock everything to a single screen (no scroll). */
+  @media (min-height: 720px) {
+    body { align-items: center; overflow: hidden; height: 100svh; }
+    .wrap { height: 100%; max-height: 100%; }
+    .history { flex: 1 1 auto; }
+    .history-list { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: clamp(8px, 2vh, 14px);
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .controls { display: flex; align-items: center; gap: 8px; }
+
+  /* language dropdown */
+  .lang-select { position: relative; }
+  .lang-trigger {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--field-border);
+    border-radius: 2px;
+    background: transparent;
+    font-family: inherit;
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--ink);
+    padding: 6px 9px;
+    height: 27px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .lang-trigger:hover { border-color: var(--muted); }
+  .lang-trigger .caret {
+    font-size: 0.55rem;
+    color: var(--muted);
+    transition: transform 0.18s;
+  }
+  .lang-select.open .lang-trigger .caret { transform: rotate(180deg); }
+
+  .lang-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    inset-inline-end: 0;
+    min-width: 172px;
+    background: var(--field-bg);
+    border: 1px solid var(--field-border);
+    border-radius: 6px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.22);
+    padding: 5px;
+    z-index: 20;
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+  .lang-select.open .lang-menu {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+  .lang-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: var(--ink);
+    padding: 9px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.12s;
+  }
+  .lang-option:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+  .lang-option.active { background: var(--ink); color: var(--paper); }
+  .lang-option .code {
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+  }
+  .lang-option.active .code { color: var(--paper); opacity: 0.7; }
+
+  .theme-btn {
+    border: 1px solid var(--field-border);
+    border-radius: 2px;
+    background: transparent;
+    color: var(--ink);
+    width: 30px;
+    height: 27px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    line-height: 1;
+  }
+
+  .intro {
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--muted);
+    margin: clamp(12px, 3vh, 22px) 0 clamp(14px, 3vh, 28px);
+  }
+
+  .field { margin-bottom: clamp(14px, 3vh, 28px); }
+  .field label {
+    display: block;
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 7px;
+  }
+  input {
+    width: 100%;
+    padding: 13px 14px;
+    border: 1.5px solid var(--field-border);
+    border-radius: 4px;
+    background: var(--field-bg);
+    font-family: inherit;
+    font-size: 1rem;
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  input::placeholder { color: var(--muted); }
+  input:focus {
+    border-color: var(--braun);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--braun) 22%, transparent);
+  }
+
+  .ball-stage {
+    align-self: center;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    flex: 0 1 auto;
+    margin: clamp(16px, 4vh, 40px) 0 clamp(20px, 5vh, 48px);
+  }
+  .ball {
+    width: min(300px, 66vw, 40vh);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    position: relative;
+    background:
+      /* one quiet, diffuse highlight — matte, not glossy */
+      radial-gradient(ellipse 46% 34% at 42% 28%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0) 78%),
+      /* even, restrained sphere shading */
+      radial-gradient(circle at 44% 38%, #2a2a2a 0%, #1a1a1a 46%, #101010 74%, #080808 100%);
+    box-shadow:
+      inset -12px -14px 34px rgba(0,0,0,0.78),
+      inset 10px 12px 30px rgba(0,0,0,0.40),
+      0 10px 20px rgba(0,0,0,0.28);
+    transition: transform 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* honest, soft contact shadow */
+  .ball::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -6%;
+    transform: translateX(-50%);
+    width: 70%;
+    height: 10%;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0.28) 0%, rgba(0,0,0,0) 72%);
+    z-index: -1;
+    filter: blur(2px);
+  }
+  /* dark round window recessed into the plastic */
+  .window {
+    width: 50%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 40%, #0b0d18 0%, #050609 62%, #010103 100%);
+    box-shadow:
+      0 0 0 2px rgba(0,0,0,0.5),
+      inset 0 5px 14px rgba(0,0,0,0.85),
+      inset 0 -2px 6px rgba(40,70,160,0.10);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: opacity 0.25s;
+    overflow: hidden;
+  }
+  /* faint pooled glow of the liquid behind the die */
+  .window::before {
+    content: "";
+    position: absolute;
+    width: 78%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 42%, rgba(30,60,160,0.22) 0%, rgba(10,20,60,0.10) 55%, rgba(0,0,0,0) 80%);
+  }
+  /* electric-blue triangular die (point down) */
+  .die {
+    position: relative;
+    z-index: 1;
+    width: 70%;
+    aspect-ratio: 1 / 0.9;
+    background: transparent;
+    transition: opacity 0.25s;
+  }
+  /* the visible triangle with softly blurred outer edges */
+  .die::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    clip-path: polygon(3% 5%, 97% 5%, 50% 97%);
+    background:
+      radial-gradient(ellipse 82% 72% at 50% 26%, #2b52e0 0%, #1636c4 45%, #0c2088 100%);
+    filter: blur(1.4px);
+  }
+  /* faint outer glow around the triangle */
+  .die::after {
+    content: "";
+    position: absolute;
+    inset: -6%;
+    clip-path: polygon(3% 5%, 97% 5%, 50% 97%);
+    background: radial-gradient(ellipse 70% 60% at 50% 40%, rgba(60,110,255,0.5) 0%, rgba(40,80,220,0) 70%);
+    filter: blur(6px);
+    z-index: -1;
+  }
+  /* text sits in the wide upper band of the triangle */
+  .readout {
+    position: absolute;
+    top: 15%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    max-height: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 0.44rem;
+    font-weight: 700;
+    line-height: 1.08;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #ffffff;
+    transition: opacity 0.2s;
+    z-index: 1;
+    word-break: normal;
+    overflow-wrap: normal;
+    hyphens: none;
+    overflow: hidden;
+  }
+  .readout-text {
+    display: block;
+    width: 100%;
+  }
+
+  .shake { animation: shake 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+  @keyframes shake {
+    0%,100% { transform: translateY(0); }
+    35% { transform: translateY(-6px); }
+    70% { transform: translateY(3px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .shake { animation: none; }
+  }
+
+  .history {
+    margin-top: clamp(14px, 3vh, 26px);
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .history-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .history-head h2 {
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .clear-all {
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 2px 0;
+    transition: color 0.15s;
+  }
+  .clear-all:hover { color: var(--braun); }
+  .clear-all:disabled { opacity: 0.4; cursor: default; }
+
+  .history-list {
+    list-style: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .history-empty {
+    font-size: 0.78rem;
+    color: var(--muted);
+    padding: 6px 0;
+  }
+  .history-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .history-item .texts { flex: 1 1 auto; min-width: 0; }
+  .history-item .q {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--ink);
+    word-break: break-word;
+  }
+  .history-item .a {
+    font-size: 0.78rem;
+    color: var(--braun);
+    margin-top: 2px;
+  }
+  .del-btn {
+    flex: 0 0 auto;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 2px 4px;
+    transition: color 0.15s;
+  }
+  .del-btn:hover { color: var(--braun); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1 id="title">Magic 8 Ball</h1>
+      <div class="controls">
+        <div class="lang-select" id="lang-select">
+          <button class="lang-trigger" id="lang-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <span id="lang-current">EN</span>
+            <span class="caret">&#9660;</span>
+          </button>
+          <div class="lang-menu" id="lang-menu" role="listbox">
+            <button class="lang-option" type="button" data-lang="en"><span>English</span><span class="code">EN</span></button>
+            <button class="lang-option" type="button" data-lang="tr"><span>Türkçe</span><span class="code">TR</span></button>
+            <button class="lang-option" type="button" data-lang="fr"><span>Français</span><span class="code">FR</span></button>
+            <button class="lang-option" type="button" data-lang="de"><span>Deutsch</span><span class="code">DE</span></button>
+            <button class="lang-option" type="button" data-lang="ja"><span>日本語</span><span class="code">JA</span></button>
+            <button class="lang-option" type="button" data-lang="ar"><span>العربية</span><span class="code">AR</span></button>
+          </div>
+        </div>
+        <button id="theme-btn" class="theme-btn" type="button" aria-label="Theme">&#9728;</button>
+      </div>
+    </header>
+
+    <p class="intro" id="intro">Think of a yes or no question, hold it in mind, then tap the ball to reveal your answer.</p>
+
+    <div class="field">
+      <label for="question" id="qlabel">Your question</label>
+      <input id="question" type="text" placeholder="Ask the universe..." autocomplete="off" />
+    </div>
+
+    <div class="ball-stage" id="ballStage" role="button" tabindex="0" aria-label="Tap the ball">
+      <div class="ball" id="ball">
+        <div class="window" id="window">
+          <div class="die" id="die">
+            <span class="readout" id="readout"><span class="readout-text" id="readout-text"></span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="history">
+      <div class="history-head">
+        <h2 id="history-title">Prophecies</h2>
+        <button id="clear-all" class="clear-all" type="button" disabled>Forget all</button>
+      </div>
+      <ul class="history-list" id="history-list">
+        <li class="history-empty" id="history-empty">No secrets revealed yet.</li>
+      </ul>
+    </section>
+  </div>
+
+<script>
+  var i18n = {
+    tr: {
+      htmlLang: "tr", dir: "ltr", code: "TR",
+      title: "Sihirli 8 Top",
+      intro: "Aklından bir evet ya da hayır sorusu geçir, onu zihninde tut ve cevabın için topa dokun.",
+      qlabel: "Aklındaki soru",
+      placeholder: "Kadere bir şey sor...",
+      prompt: "Önce bir soru fısılda.",
+      dash: "\u2014",
+      historyTitle: "Kehanetler",
+      clearAll: "Hepsini unut",
+      empty: "Henüz hiçbir sır açığa çıkmadı.",
+      del: "Sil",
+      answers: [
+        "Kesinlikle evet","Bence evet","Şüphesiz","Buna güvenebilirsin","Evet",
+        "İşaretler evet diyor","Çok muhtemel","Olumlu görünüyor","Pek iyi görünüyor",
+        "Belki, tekrar sor","Şimdi söyleyemem","Sonra tekrar dene","Konsantre ol ve tekrar sor",
+        "Pek sanmıyorum","Cevabım hayır","Kaynaklarım hayır diyor","Çok şüpheli",
+        "Kesinlikle hayır","Hiç sanmıyorum","Hayal bile etme"
+      ]
+    },
+    en: {
+      htmlLang: "en", dir: "ltr", code: "EN",
+      title: "Magic 8 Ball",
+      intro: "Think of a yes or no question, hold it in mind, then tap the ball to reveal your answer.",
+      qlabel: "Your question",
+      placeholder: "Ask the universe...",
+      prompt: "Whisper a question first.",
+      dash: "\u2014",
+      historyTitle: "Prophecies",
+      clearAll: "Forget all",
+      empty: "No secrets revealed yet.",
+      del: "Delete",
+      answers: [
+        "It is certain","Yes definitely","Without a doubt","You may rely on it","Yes",
+        "Signs point to yes","Most likely","Outlook good","It looks good",
+        "Maybe, ask again","Cannot tell now","Try again later","Concentrate and ask again",
+        "Don't count on it","My reply is no","My sources say no","Very doubtful",
+        "Definitely not","I doubt it","Don't even think about it"
+      ]
+    },
+    fr: {
+      htmlLang: "fr", dir: "ltr", code: "FR",
+      title: "Boule Magique 8",
+      intro: "Pense à une question par oui ou non, garde-la à l'esprit, puis touche la boule pour ta réponse.",
+      qlabel: "Ta question",
+      placeholder: "Interroge l'univers...",
+      prompt: "Murmure d'abord une question.",
+      dash: "\u2014",
+      historyTitle: "Prophéties",
+      clearAll: "Tout oublier",
+      empty: "Aucun secret révélé pour l'instant.",
+      del: "Supprimer",
+      answers: [
+        "C'est certain","Oui, absolument","Sans aucun doute","Tu peux compter dessus","Oui",
+        "Les signes disent oui","Très probable","Perspectives favorables","Ça s'annonce bien",
+        "Peut-être, redemande","Impossible à dire","Réessaie plus tard","Concentre-toi et redemande",
+        "N'y compte pas","Ma réponse est non","Mes sources disent non","Très douteux",
+        "Certainement pas","J'en doute","N'y pense même pas"
+      ]
+    },
+    de: {
+      htmlLang: "de", dir: "ltr", code: "DE",
+      title: "Magische 8 Kugel",
+      intro: "Denk an eine Ja- oder Nein-Frage, behalte sie im Kopf und berühre die Kugel für deine Antwort.",
+      qlabel: "Deine Frage",
+      placeholder: "Frag das Universum...",
+      prompt: "Flüstere zuerst eine Frage.",
+      dash: "\u2014",
+      historyTitle: "Prophezeiungen",
+      clearAll: "Alles vergessen",
+      empty: "Noch kein Geheimnis enthüllt.",
+      del: "Löschen",
+      answers: [
+        "Es ist sicher","Ja, definitiv","Ohne Zweifel","Darauf kannst du bauen","Ja",
+        "Zeichen deuten auf ja","Sehr wahrscheinlich","Aussichten gut","Sieht gut aus",
+        "Vielleicht, frag erneut","Kann ich jetzt nicht sagen","Versuch es später","Konzentrier dich und frag erneut",
+        "Verlass dich nicht drauf","Meine Antwort ist nein","Meine Quellen sagen nein","Sehr zweifelhaft",
+        "Definitiv nicht","Ich bezweifle es","Denk nicht mal dran"
+      ]
+    },
+    ja: {
+      htmlLang: "ja", dir: "ltr", code: "JA",
+      title: "マジック8ボール",
+      intro: "はい・いいえで答えられる質問を思い浮かべ、心に留めて、ボールに触れて答えを引き出して。",
+      qlabel: "あなたの質問",
+      placeholder: "宇宙に問いかけて...",
+      prompt: "まず質問をささやいて。",
+      dash: "\u2014",
+      historyTitle: "予言",
+      clearAll: "すべて忘れる",
+      empty: "まだ秘密は明かされていない。",
+      del: "削除",
+      answers: [
+        "間違いない","もちろん、そうだ","疑いの余地なし","信じて大丈夫","はい",
+        "兆しは「はい」","可能性は高い","見通しは良い","良さそうだ",
+        "たぶん、もう一度聞いて","今は言えない","また後で試して","集中してもう一度聞いて",
+        "あてにしないで","答えはノー","情報源はノーと言う","かなり怪しい",
+        "絶対にない","疑わしい","考えることすらやめて"
+      ]
+    },
+    ar: {
+      htmlLang: "ar", dir: "rtl", code: "AR",
+      title: "الكرة السحرية 8",
+      intro: "فكّر في سؤال بنعم أو لا، احتفظ به في ذهنك، ثم المس الكرة لتكشف إجابتك.",
+      qlabel: "سؤالك",
+      placeholder: "اسأل الكون...",
+      prompt: "اهمس بسؤال أولاً.",
+      dash: "\u2014",
+      historyTitle: "النبوءات",
+      clearAll: "نسيان الكل",
+      empty: "لم يُكشف أي سر بعد.",
+      del: "حذف",
+      answers: [
+        "بالتأكيد","نعم قطعاً","بلا شك","يمكنك الاعتماد عليه","نعم",
+        "المؤشرات تقول نعم","على الأرجح","التوقعات جيدة","تبدو جيدة",
+        "ربما، اسأل مجدداً","لا أستطيع الآن","حاول لاحقاً","ركّز واسأل مجدداً",
+        "لا تعوّل على ذلك","جوابي لا","مصادري تقول لا","مشكوك فيه جداً",
+        "قطعاً لا","أشك في ذلك","لا تفكر في الأمر"
+      ]
+    }
+  };
+
+  var lang = "en";
+  var busy = false;
+  var answered = false;
+
+  var ball = document.getElementById('ball');
+  var stage = document.getElementById('ballStage');
+  var readout = document.getElementById('readout');
+  var readoutText = document.getElementById('readout-text');
+  var die = document.getElementById('die');
+
+  // Fit text by trying several box widths and picking the one that allows
+  // the largest font size — short answers use a narrow box (big text),
+  // long answers a wider box, so the triangle is always well filled.
+  function setReadout(text) {
+    // never show a trailing period
+    if (text) text = text.replace(/[.\u3002]+$/, '');
+    readoutText.textContent = text;
+    if (!text) { readout.style.width = '60%'; return; }
+
+    function biggestFit() {
+      var lo = 4, hi = 13, best = lo;
+      for (var i = 0; i < 16; i++) {
+        var mid = (lo + hi) / 2;
+        readout.style.fontSize = mid + 'px';
+        if (readoutText.scrollWidth <= readout.clientWidth &&
+            readoutText.scrollHeight <= readout.clientHeight) {
+          best = mid; lo = mid;
+        } else { hi = mid; }
+      }
+      return best;
+    }
+
+    var widths = [40, 46, 52, 58, 64];  // % of triangle width
+    var bestW = widths[0], bestPx = 0;
+    for (var w = 0; w < widths.length; w++) {
+      readout.style.width = widths[w] + '%';
+      var px = biggestFit();
+      if (px > bestPx) { bestPx = px; bestW = widths[w]; }
+    }
+    readout.style.width = bestW + '%';
+    biggestFit();
+    readout.style.fontSize = (bestPx - 0.2).toFixed(2) + 'px';
+  }
+  var question = document.getElementById('question');
+  var title = document.getElementById('title');
+  var intro = document.getElementById('intro');
+  var qlabel = document.getElementById('qlabel');
+  var langSelect = document.getElementById('lang-select');
+  var langTrigger = document.getElementById('lang-trigger');
+  var langMenu = document.getElementById('lang-menu');
+  var langCurrent = document.getElementById('lang-current');
+  var langOptions = langMenu.querySelectorAll('.lang-option');
+  var themeBtn = document.getElementById('theme-btn');
+  var historyTitle = document.getElementById('history-title');
+  var clearAllBtn = document.getElementById('clear-all');
+  var historyList = document.getElementById('history-list');
+
+  var qHistory = [];
+  var nextId = 1;
+
+  function applyLang(next) {
+    lang = next;
+    var t = i18n[lang];
+    document.documentElement.lang = t.htmlLang;
+    document.documentElement.dir = t.dir || "ltr";
+    document.title = t.title;
+    title.textContent = t.title;
+    intro.innerHTML = t.intro;
+    qlabel.textContent = t.qlabel;
+    question.placeholder = t.placeholder;
+    langCurrent.textContent = t.code;
+    langOptions.forEach(function (opt) {
+      opt.classList.toggle('active', opt.getAttribute('data-lang') === lang);
+    });
+    historyTitle.textContent = t.historyTitle;
+    clearAllBtn.textContent = t.clearAll;
+    renderHistory();
+    if (!answered) {
+      setReadout("");
+    }
+  }
+
+  function closeMenu() {
+    langSelect.classList.remove('open');
+    langTrigger.setAttribute('aria-expanded', 'false');
+  }
+
+  function renderHistory() {
+    var t = i18n[lang];
+    clearAllBtn.disabled = qHistory.length === 0;
+    historyList.innerHTML = "";
+    if (qHistory.length === 0) {
+      var empty = document.createElement('li');
+      empty.className = 'history-empty';
+      empty.textContent = t.empty;
+      historyList.appendChild(empty);
+      return;
+    }
+    qHistory.forEach(function (item) {
+      var li = document.createElement('li');
+      li.className = 'history-item';
+
+      var texts = document.createElement('div');
+      texts.className = 'texts';
+      var q = document.createElement('div');
+      q.className = 'q';
+      q.textContent = item.question;
+      var a = document.createElement('div');
+      a.className = 'a';
+      a.textContent = item.answer;
+      texts.appendChild(q);
+      texts.appendChild(a);
+
+      var del = document.createElement('button');
+      del.className = 'del-btn';
+      del.type = 'button';
+      del.setAttribute('aria-label', t.del);
+      del.innerHTML = '\u00D7';
+      del.addEventListener('click', function () {
+        qHistory = qHistory.filter(function (h) { return h.id !== item.id; });
+        renderHistory();
+      });
+
+      li.appendChild(texts);
+      li.appendChild(del);
+      historyList.appendChild(li);
+    });
+  }
+
+  function setTheme(mode) {
+    document.documentElement.setAttribute('data-theme', mode);
+    themeBtn.innerHTML = mode === 'dark' ? '\u263E' : '\u2600';
+  }
+
+  function ask() {
+    if (busy) return;
+    var t = i18n[lang];
+    if (!question.value.trim()) {
+      setReadout(t.prompt);
+      question.focus();
+      return;
+    }
+    busy = true;
+    die.style.opacity = "0";
+    ball.classList.remove('shake');
+    void ball.offsetWidth;
+    ball.classList.add('shake');
+    var asked = question.value.trim();
+    setTimeout(function () {
+      var pick = t.answers[Math.floor(Math.random() * t.answers.length)];
+      setReadout(pick);
+      die.style.opacity = "1";
+      answered = true;
+      busy = false;
+      qHistory.unshift({ id: nextId++, question: asked, answer: pick });
+      renderHistory();
+    }, 600);
+  }
+
+  langTrigger.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var willOpen = !langSelect.classList.contains('open');
+    langSelect.classList.toggle('open', willOpen);
+    langTrigger.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+  });
+  langOptions.forEach(function (opt) {
+    opt.addEventListener('click', function () {
+      applyLang(opt.getAttribute('data-lang'));
+      closeMenu();
+    });
+  });
+  document.addEventListener('click', function (e) {
+    if (!langSelect.contains(e.target)) closeMenu();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeMenu();
+  });
+
+  themeBtn.addEventListener('click', function () {
+    var current = document.documentElement.getAttribute('data-theme');
+    setTheme(current === 'dark' ? 'light' : 'dark');
+  });
+
+  clearAllBtn.addEventListener('click', function () {
+    qHistory = [];
+    renderHistory();
+  });
+
+  stage.addEventListener('click', ask);
+  stage.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ask(); }
+  });
+  question.addEventListener('keydown', function (e) { if (e.key === 'Enter') ask(); });
+
+  // initial language + theme
+  applyLang(lang);
+  setTheme(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+</script>
+</body>
+</html>
